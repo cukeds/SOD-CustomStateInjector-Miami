@@ -3,7 +3,7 @@
 
 # SODCustomStateInjectorMiami
 
-CustomStateInjector.Miami (CSI Miami for short) is a plugin designed to allow the injection of custom generation steps during Shadows of Doubt map generation process. It uses attributes for automatic execution in a structured and efficient manner.
+CustomStateInjector.Miami (CSI Miami for short) is a plugin designed to allow the injection of custom generation steps during Shadows of Doubt map generation process. It uses attributes for ease of use.
 
 ## Table of Contents
 - [Installation](#installation)
