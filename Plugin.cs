@@ -38,7 +38,6 @@ public class Plugin : PluginController<Plugin, IConfigBindings>
         RegisterStateGenerateMethods();
         GenerateStepsFromConfig();
         ValidateStateGenerateMethods();
-        // Log.LogInfo("MaxSlotAmount: " + Config.MaxSlotAmount);
         Harmony.PatchAll();
 
     }
@@ -72,10 +71,16 @@ public class Plugin : PluginController<Plugin, IConfigBindings>
                 Name=kvp[0],
                 LoadState= (CityConstructor.LoadState) Utils.LoadStatesLength() + customSteps.Count,
             };
-            
-            
+            customSteps.Add(new CustomStep{Step=customStep});
+
+        }
+
+        foreach (var pair in kvpSteps)
+        {
+            var kvp = pair.Split(":");
             var afterStep = new Step{Name=kvp[1], LoadState= GetLoadState(kvp[1])};
-            customSteps.Add(new CustomStep{Step=customStep, After=afterStep});
+            var customStep = customSteps.Find(x => x.Step.Name == kvp[0]);
+            customStep.After = afterStep;
         }
         
         foreach(var step in customSteps)
@@ -99,10 +104,9 @@ public class Plugin : PluginController<Plugin, IConfigBindings>
         }
         catch (Exception e)
         {
-            throw new Exception("Step not found in CityConstructor.LoadState nor in custom steps");
+            throw new Exception($"Step {name} not found in CityConstructor.LoadState nor in custom steps");
         }
     }
-    
     
     private static void RegisterStateGenerateMethods()
     {
@@ -120,7 +124,6 @@ public class Plugin : PluginController<Plugin, IConfigBindings>
             }
         }
     }
-    
     
     private static void ValidateStateGenerateMethods()
     {
@@ -150,10 +153,7 @@ public class Plugin : PluginController<Plugin, IConfigBindings>
 public class CityConstructor_Update_Patch
 {
     
-    public static CityConstructor.LoadState generateClubs = (CityConstructor.LoadState) Enum.GetValues(typeof(CityConstructor.LoadState)).Length;
-    
     [StructLayout(LayoutKind.Sequential)]
-    
     public struct TaskBlittable 
     {
         public bool IsCompleted;
@@ -213,20 +213,4 @@ public class CityConstructor_Update_Patch
         
     }
 
-}
-
-
-public class CustomStateGenerators
-{
-    [State("generateClubs")]
-    public static void GenerateClubs()
-    {
-        Plugin.Log.LogInfo("Generating clubs...");
-    }
-    
-    [State("generateProstitutes")]
-    public static void GenerateProstitutes()
-    {
-        Plugin.Log.LogInfo("Generating prostitutes...");
-    }
 }

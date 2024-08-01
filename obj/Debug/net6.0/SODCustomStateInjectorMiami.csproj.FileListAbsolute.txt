@@ -17,3 +17,4 @@ C:\Users\Juan\Downloads\Cookie and Morts shit\SOD Modding\SODCustomStateInjector
 C:\Users\Juan\Downloads\Cookie and Morts shit\SOD Modding\SODCustomStateInjectorMiami\obj\Debug\net6.0\refint\SOD.CustomStateInjector.Miami.dll
 C:\Users\Juan\Downloads\Cookie and Morts shit\SOD Modding\SODCustomStateInjectorMiami\obj\Debug\net6.0\SOD.CustomStateInjector.Miami.pdb
 C:\Users\Juan\Downloads\Cookie and Morts shit\SOD Modding\SODCustomStateInjectorMiami\obj\Debug\net6.0\ref\SOD.CustomStateInjector.Miami.dll
+C:\Users\Juan\Downloads\Cookie and Morts shit\SOD Modding\SODCustomStateInjectorMiami\obj\Debug\net6.0\SODCustomStateInjectorMiami.sourcelink.json
