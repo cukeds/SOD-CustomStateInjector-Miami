@@ -1,0 +1,1 @@
+robocopy "C:\Users\Juan\Downloads\Cookie and Morts shit\SOD Modding\SODCustomStateInjectorMiami\bin\Debug\net6.0" "C:\Program Files (x86)\Shadows of Doubt\BepInEx\plugins" "SOD.CustomStateInjector.Miami.dll" /NFL /NDL /NJH /NJS /nc /ns /np
