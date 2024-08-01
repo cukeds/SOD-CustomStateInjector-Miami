@@ -400,3 +400,6 @@ FodyWeavers.xsd
 obj/
 bin/
 Folder.DotSettings.user
+*.zip
+*.rar
+*.7z
