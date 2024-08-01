@@ -59,7 +59,8 @@ public class Plugin : PluginController<Plugin, IConfigBindings>
         var stepsStr = Instance.Config.GenerationSteps;
         if (stepsStr == "")
         {
-            throw new Exception("No steps defined in config");
+            Log.LogError("No steps defined in config");
+            return;
         }
         
         var kvpSteps = stepsStr.Split(',');
