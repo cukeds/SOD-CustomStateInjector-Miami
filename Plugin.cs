@@ -154,7 +154,7 @@ public class CityConstructor_Update_Patch
 {
     
     [StructLayout(LayoutKind.Sequential)]
-    public struct TaskBlittable 
+    public struct TaskBlittable
     {
         public bool IsCompleted;
     }

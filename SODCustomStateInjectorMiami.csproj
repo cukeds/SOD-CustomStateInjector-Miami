@@ -23,19 +23,19 @@
 
   <ItemGroup>
     <Reference Include="Assembly-CSharp">
-      <HintPath>..\SODSocialClubs\lib\Assembly-CSharp.dll</HintPath>
+      <HintPath>lib\Assembly-CSharp.dll</HintPath>
     </Reference>
     <Reference Include="Il2Cppmscorlib">
-      <HintPath>..\SODSocialClubs\lib\Il2Cppmscorlib.dll</HintPath>
+      <HintPath>lib\Il2Cppmscorlib.dll</HintPath>
     </Reference>
     <Reference Include="NaughtyAttributes.Core">
-      <HintPath>..\SODSocialClubs\lib\NaughtyAttributes.Core.dll</HintPath>
+      <HintPath>lib\NaughtyAttributes.Core.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine">
-      <HintPath>..\SODSocialClubs\lib\UnityEngine.dll</HintPath>
+      <HintPath>lib\UnityEngine.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.CoreModule">
-      <HintPath>..\SODSocialClubs\lib\UnityEngine.CoreModule.dll</HintPath>
+      <HintPath>lib\UnityEngine.CoreModule.dll</HintPath>
     </Reference>
   </ItemGroup>
 </Project>
