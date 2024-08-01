@@ -85,6 +85,33 @@ public static class CustomStateGenerator
     
 }
 ```
+
+Game's generation steps in the order they appear in the Enum
+```csharp
+  parsingFile
+  setupCityBoundary
+  generateDistricts
+  generateBlocks
+  generateDensity
+  generateBuildings
+  generatePathfinding
+  generateBlueprints
+  generateCompanies
+  connectRooms
+  generateCitizens
+  generateRelationships
+  gatherData
+  generateAirDucts
+  generateEvidence
+  generateInteriors
+  prepareCitizens
+  loadObjects
+  finalizing
+  savingData
+  loadState
+  preSim
+  loadComplete
+```
 ### Generating Custom States
 
 Methods to generate the custom states must be annotated with the `GenerateStateAttribute`, which takes a single parameter:
