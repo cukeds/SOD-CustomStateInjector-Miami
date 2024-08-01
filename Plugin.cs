@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using BepInEx;
 using BepInEx.Logging;
+using BepInEx.Unity.IL2CPP;
 using HarmonyLib;
 using Il2CppInterop.Runtime.InteropTypes;
 using SODCustomStateInjectorMiami.Attributes;
@@ -22,20 +23,25 @@ public static class CustomStateInjector
 }
 
 [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
-public class Plugin
+public class Plugin : BasePlugin
 {
-    public static ManualLogSource Log;
     
-    Harmony Harmony = new(MyPluginInfo.PLUGIN_GUID);
+    public new static ManualLogSource Log;
     
-    public static Plugin Instance;
+    Harmony Harmony;
     
-    public List<CustomStep> CustomSteps = [];
+    public static Plugin Instance { get; private set; }
+    
+    public List<CustomStep> CustomSteps;
 
-    private static Dictionary<string, Action> stateGenerateMethods = new Dictionary<string, Action>();
-
-    public void Load()
-    {
+    private static Dictionary<string, Action> stateGenerateMethods = new();
+    
+    public override void Load()
+    {        
+        Instance = Instance == null ? this : throw new Exception("A Plugin instance already exists.");
+        CustomSteps = [];
+        Harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
+        Log = base.Log;
         Harmony.PatchAll();
     }
 
