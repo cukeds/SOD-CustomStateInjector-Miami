@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace SODCustomStateInjectorMiami;
+﻿namespace SODCustomStateInjectorMiami;
 
 public class Step()
 {
@@ -13,15 +11,4 @@ public class CustomStep
     public Step Step;
     public Step After;
     public Step Original = new();
-}
-
-[AttributeUsage(AttributeTargets.Method)]
-public class StateAttribute : Attribute
-{
-    public string StateName { get; }
-
-    public StateAttribute(string stateName)
-    {
-        StateName = stateName;
-    }
 }

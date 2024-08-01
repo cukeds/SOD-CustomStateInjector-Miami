@@ -4,44 +4,48 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using BepInEx;
+using BepInEx.Logging;
 using HarmonyLib;
 using Il2CppInterop.Runtime.InteropTypes;
-using SOD.Common.BepInEx;
-using SOD.Common.BepInEx.Configuration;
+using SODCustomStateInjectorMiami.Attributes;
+
+
 
 namespace SODCustomStateInjectorMiami;
 
-
-public interface IConfigBindings
+public static class CustomStateInjector
 {
-    // Binds in the config file as: Prices.SyncDiskPrice
-    [Binding("", "Key-value pair for the new step to add" +
-                                                 " and what step to execute it after it, separated by commas" +
-                                                 "\nValues must be in order\n" +
-                                                 "Eg. generateClubs:generateCompanies, generateGuards:generateClubs\n",
-        "StatesConfig.GenerationSteps")]
-    string GenerationSteps { get; set; }
-
+    public static void InjectStates()
+    {
+        Plugin.Instance.Start();
+    }
 }
 
 [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
-[BepInDependency("Venomaus.SOD.Common")]
-public class Plugin : PluginController<Plugin, IConfigBindings>
+public class Plugin
 {
-
-    public static List<CustomStep> customSteps = [];
+    public static ManualLogSource Log;
     
+    Harmony Harmony = new(MyPluginInfo.PLUGIN_GUID);
+    
+    public static Plugin Instance;
+    
+    public List<CustomStep> CustomSteps = [];
+
     private static Dictionary<string, Action> stateGenerateMethods = new Dictionary<string, Action>();
-    
-    public override void Load()
-    {
-        RegisterStateGenerateMethods();
-        GenerateStepsFromConfig();
-        ValidateStateGenerateMethods();
-        Harmony.PatchAll();
 
+    public void Load()
+    {
+        Harmony.PatchAll();
     }
-    
+
+    public void Start()
+    {
+        RegisterCustomStates();
+        RegisterStateGenerateMethods();
+        ValidateStateGenerateMethods();
+    }
+
     public static T GetField<T>(Il2CppObjectBase instance, string fieldName)
     {
         var field = IL2CPPUtils.GetFieldIl2cpp(instance, fieldName);
@@ -54,88 +58,78 @@ public class Plugin : PluginController<Plugin, IConfigBindings>
         IL2CPPUtils.SetFieldIl2cpp(instance, field, value);
     }
 
-    private static void GenerateStepsFromConfig()
+    public CityConstructor.LoadState GetLoadState(string name)
     {
-        var stepsStr = Instance.Config.GenerationSteps;
-        if (stepsStr == "")
-        {
-            Log.LogError("No steps defined in config");
-            return;
-        }
-        
-        var kvpSteps = stepsStr.Split(',');
-        foreach (var pair in kvpSteps)
-        {
-            var kvp = pair.Split(':');
-            var customStep = new Step
-            {
-                Name=kvp[0],
-                LoadState= (CityConstructor.LoadState) Utils.LoadStatesLength() + customSteps.Count,
-            };
-            customSteps.Add(new CustomStep{Step=customStep});
-
-        }
-
-        foreach (var pair in kvpSteps)
-        {
-            var kvp = pair.Split(":");
-            var afterStep = new Step{Name=kvp[1], LoadState= GetLoadState(kvp[1])};
-            var customStep = customSteps.Find(x => x.Step.Name == kvp[0]);
-            customStep.After = afterStep;
-        }
-        
-        foreach(var step in customSteps)
-        {
-            Log.LogInfo("Step: " + step.Step.Name + " LoadState: " + (int) step.Step.LoadState + " After: " + step.After.Name + " LoadState: " + (int) step.After.LoadState);
-        }
-
-    }
-    
-    public static CityConstructor.LoadState GetLoadState(string name)
-    {
-        var res = customSteps.Find(x => x.Step.Name == name);
+        var res = CustomSteps.Find(x => x.Step.Name == name);
         if (res != null)
         {
             return res.Step.LoadState;
         }
-        
+
         try
         {
-            return (CityConstructor.LoadState) Enum.Parse(typeof(CityConstructor.LoadState), name);
+            return (CityConstructor.LoadState)Enum.Parse(typeof(CityConstructor.LoadState), name);
         }
         catch (Exception e)
         {
             throw new Exception($"Step {name} not found in CityConstructor.LoadState nor in custom steps");
         }
     }
-    
+
+    private static void RegisterCustomStates()
+    {
+        var types = AppDomain.CurrentDomain.GetAssemblies()
+            .SelectMany(assembly => assembly.GetTypes())
+            .Where(type => type.GetCustomAttributes<CustomStateAttribute>(true).Any());
+
+        foreach (var type in types)
+        {
+            var attributes = type.GetCustomAttributes<CustomStateAttribute>(true);
+            foreach (var attribute in attributes)
+            {
+                var customStep = new Step
+                {
+                    Name = attribute.StepName,
+                    LoadState = (CityConstructor.LoadState)Utils.LoadStatesLength() + Instance.CustomSteps.Count,
+                };
+
+                var afterStep = new Step { Name = attribute.AfterStepName, LoadState = Instance.GetLoadState(attribute.AfterStepName) };
+                Instance.CustomSteps.Add(new CustomStep { Step = customStep, After = afterStep });
+            }
+        }
+    }
+
     private static void RegisterStateGenerateMethods()
     {
         var methods = AppDomain.CurrentDomain.GetAssemblies()
             .SelectMany(assembly => assembly.GetTypes())
-            .SelectMany(type => type.GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
-            .Where(method => method.GetCustomAttribute<StateAttribute>() != null);
+            .SelectMany(type => type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public |
+                                                BindingFlags.NonPublic))
+            .Where(method => method.GetCustomAttribute<GenerateStateAttribute>() != null);
 
         foreach (var method in methods)
         {
-            var attribute = method.GetCustomAttribute<StateAttribute>();
+            var attribute = method.GetCustomAttribute<GenerateStateAttribute>();
             if (attribute != null)
             {
                 stateGenerateMethods[attribute.StateName] = (Action)Delegate.CreateDelegate(typeof(Action), method);
             }
         }
     }
-    
-    private static void ValidateStateGenerateMethods()
+
+    private void ValidateStateGenerateMethods()
     {
-        
-        var notfound =customSteps.Where(step => !stateGenerateMethods.ContainsKey(step.Step.Name)).ToList();
+        var found = CustomSteps.Where(step => stateGenerateMethods.ContainsKey(step.Step.Name)).ToList();
+        var notfound = CustomSteps.Where(step => !stateGenerateMethods.ContainsKey(step.Step.Name)).ToList();
         if (notfound.Count > 0)
         {
-            throw new Exception($"StateGenerateMethods not found for: {string.Join(", ", notfound.Select(x => x.Step.Name))}");
+            Log.LogWarning(
+                $"Generate Methods not found for: {string.Join(", ", notfound.Select(x => x.Step.Name))}");
         }
+
+        Log.LogInfo($"{string.Join(", ", found.Select(x => x.Step.Name))} added to custom steps");
     }
-    
+
     public static void Generate(string stateName)
     {
         if (stateGenerateMethods.TryGetValue(stateName, out var method))
@@ -153,51 +147,54 @@ public class Plugin : PluginController<Plugin, IConfigBindings>
 [HarmonyPatch(typeof(CityConstructor), "Update")]
 public class CityConstructor_Update_Patch
 {
-    
+
     [StructLayout(LayoutKind.Sequential)]
     public struct TaskBlittable
     {
         public bool IsCompleted;
     }
-    
-    
-    
+
+
+
     public static void Prefix(Il2CppObjectBase __instance, out int __state)
-    {        
+    {
         var loadCursor = Plugin.GetField<int>(__instance, "loadCursor");
-        var loadState = (CityConstructor.LoadState) Plugin.GetField<int>(__instance, "loadState");
-        var allLoadStates = Enum.GetValues(typeof (CityConstructor.LoadState)).Cast<CityConstructor.LoadState>().ToList<CityConstructor.LoadState>();
+        var loadState = (CityConstructor.LoadState)Plugin.GetField<int>(__instance, "loadState");
+        var allLoadStates = Enum.GetValues(typeof(CityConstructor.LoadState)).Cast<CityConstructor.LoadState>()
+            .ToList<CityConstructor.LoadState>();
         var generateNew = Plugin.GetField<bool>(__instance, "generateNew");
         var loadingOperationActive = Plugin.GetField<bool>(__instance, "loadingOperationActive");
         var loadFullCityDataTask = Plugin.GetField<TaskBlittable>(__instance, "loadFullCityDataTask");
-        
-        __state = (int) loadState;
+
+        __state = (int)loadState;
         if (loadCursor >= allLoadStates.Count) return;
         if (loadingOperationActive && !loadFullCityDataTask.IsCompleted) return;
         if (!generateNew) return;
-        var toInject = Plugin.customSteps.Find(x => x.Step.LoadState == loadState);
+        var toInject = Plugin.Instance.CustomSteps.Find(x => x.Step.LoadState == loadState);
         if (toInject == null) return;
         Plugin.Log.LogInfo($"Generating {toInject.Step.Name}...");
 
         Plugin.Generate(toInject.Step.Name);
-        
+
         Plugin.Log.LogInfo($"Generation of {toInject.Step.Name} complete!");
-        Plugin.SetField(__instance, "loadState", (int) toInject.Original.LoadState);
+        Plugin.SetField(__instance, "loadState", (int)toInject.Original.LoadState);
         Plugin.SetField(__instance, "loadCursor", loadCursor - 1);
     }
-    
+
     public static void Postfix(Il2CppObjectBase __instance, int __state)
     {
         var loadCursor = Plugin.GetField<int>(__instance, "loadCursor");
-        var allLoadStates = Enum.GetValues(typeof (CityConstructor.LoadState)).Cast<CityConstructor.LoadState>().ToList();
+        var allLoadStates = Enum.GetValues(typeof(CityConstructor.LoadState)).Cast<CityConstructor.LoadState>()
+            .ToList();
         var generateNew = Plugin.GetField<bool>(__instance, "generateNew");
         var loadingOperationActive = Plugin.GetField<bool>(__instance, "loadingOperationActive");
         var loadFullCityDataTask = Plugin.GetField<TaskBlittable>(__instance, "loadFullCityDataTask");
-        
-        if (loadCursor >= allLoadStates.Count + Plugin.customSteps.Count) return;
+
+        if (loadCursor >= allLoadStates.Count + Plugin.Instance.CustomSteps.Count) return;
         if (loadingOperationActive && !loadFullCityDataTask.IsCompleted) return;
         if (!generateNew) return;
-        var toInject = Plugin.customSteps.Find(x => x.After.LoadState == (CityConstructor.LoadState) __state);
+        var toInject =
+            Plugin.Instance.CustomSteps.Find(x => x.After.LoadState == (CityConstructor.LoadState)__state);
         if (toInject == null) return;
 
         try
@@ -207,11 +204,14 @@ public class CityConstructor_Update_Patch
         }
         catch (Exception e)
         {
-            toInject.Original = Plugin.customSteps.Find(x => x.Step.LoadState == (CityConstructor.LoadState) __state).Original;
+            toInject.Original = Plugin.Instance.CustomSteps
+                .Find(x => x.Step.LoadState == (CityConstructor.LoadState)__state).Original;
         }
+
         Plugin.Log.LogInfo($"Injecting {toInject.Step.Name} into {toInject.After.Name}...");
-        Plugin.SetField(__instance, "loadState", (int) toInject.Step.LoadState);
-        
+        Plugin.SetField(__instance, "loadState", (int)toInject.Step.LoadState);
+
     }
 
 }
+
