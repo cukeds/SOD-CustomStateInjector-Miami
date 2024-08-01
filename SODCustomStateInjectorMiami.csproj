@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
-    <AssemblyName>Cukeds.CustomStateInjector.Miami</AssemblyName>
+    <AssemblyName>SOD.CustomStateInjector.Miami</AssemblyName>
     <Product>SOD CustomStateInjector Miami</Product>
     <Version>1.0.0</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

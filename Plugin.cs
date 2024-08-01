@@ -14,8 +14,15 @@ using SODCustomStateInjectorMiami.Attributes;
 
 namespace SODCustomStateInjectorMiami;
 
+
+/// <summary>
+///   This class is used to inject custom states into the game.
+/// </summary>
 public static class CustomStateInjector
 {
+    /// <summary>
+    ///     Injects the custom states into the game.
+    /// </summary>
     public static void InjectStates()
     {
         Plugin.Instance.Start();
@@ -45,6 +52,7 @@ public class Plugin : BasePlugin
         Harmony.PatchAll();
     }
 
+    
     public void Start()
     {
         RegisterCustomStates();
@@ -52,18 +60,40 @@ public class Plugin : BasePlugin
         ValidateStateGenerateMethods();
     }
 
+    
+    /// <summary>
+    ///   Gets the value of a field from Il2CPP.
+    /// </summary>
+    /// <param name="instance"></param>
+    /// <param name="fieldName"></param>
+    /// <typeparam name="T"> The type to cast the field. Has to be blittable.</typeparam>
+    /// <returns> The value of the field.</returns>
     public static T GetField<T>(Il2CppObjectBase instance, string fieldName)
     {
         var field = IL2CPPUtils.GetFieldIl2cpp(instance, fieldName);
         return IL2CPPUtils.GetFieldValue<T>(instance, field);
     }
 
+    /// <summary>
+    ///  Sets the value of a field from Il2CPP.
+    /// </summary>
+    /// <param name="instance"></param>
+    /// <param name="fieldName"></param>
+    /// <param name="value"> The value to set the field to.</param>
+    /// <typeparam name="T"> The type of the value to set. Has to be blittable.</typeparam>
     public static void SetField<T>(Il2CppObjectBase instance, string fieldName, T value)
     {
         var field = IL2CPPUtils.GetFieldIl2cpp(instance, fieldName);
         IL2CPPUtils.SetFieldIl2cpp(instance, field, value);
     }
 
+    
+    /// <summary>
+    ///  Gets the Enum value of a step based on the name.
+    /// </summary>
+    /// <param name="name">The name of the step.</param>
+    /// <returns> The Enum value of the custom step.</returns>
+    /// <exception cref="Exception"> If the step is not found in the custom steps or in the CityConstructor.LoadState.</exception>
     public CityConstructor.LoadState GetLoadState(string name)
     {
         var res = CustomSteps.Find(x => x.Step.Name == name);
@@ -76,12 +106,15 @@ public class Plugin : BasePlugin
         {
             return (CityConstructor.LoadState)Enum.Parse(typeof(CityConstructor.LoadState), name);
         }
-        catch (Exception e)
+        catch (Exception)
         {
             throw new Exception($"Step {name} not found in CityConstructor.LoadState nor in custom steps");
         }
     }
 
+    /// <summary>
+    ///  Registers the custom states into the game based on the CustomStateAttribute.
+    /// </summary>
     private static void RegisterCustomStates()
     {
         var types = AppDomain.CurrentDomain.GetAssemblies()
@@ -105,6 +138,9 @@ public class Plugin : BasePlugin
         }
     }
 
+    /// <summary>
+    ///  Registers the state generation methods based on the GenerateStateAttribute.
+    /// </summary>
     private static void RegisterStateGenerateMethods()
     {
         var methods = AppDomain.CurrentDomain.GetAssemblies()
@@ -123,6 +159,9 @@ public class Plugin : BasePlugin
         }
     }
 
+    /// <summary>
+    ///  Validates that every custom step has a generate method, and gives a warning if not.
+    /// </summary>
     private void ValidateStateGenerateMethods()
     {
         var found = CustomSteps.Where(step => stateGenerateMethods.ContainsKey(step.Step.Name)).ToList();
@@ -136,6 +175,11 @@ public class Plugin : BasePlugin
         Log.LogInfo($"{string.Join(", ", found.Select(x => x.Step.Name))} added to custom steps");
     }
 
+    
+    /// <summary>
+    ///  Generates a state based on the state name, used to call the generate methods.
+    /// </summary>
+    /// <param name="stateName"> The name of the state. </param>
     public static void Generate(string stateName)
     {
         if (stateGenerateMethods.TryGetValue(stateName, out var method))
@@ -161,13 +205,17 @@ public class CityConstructor_Update_Patch
     }
 
 
-
+    /// <summary>
+    ///  Passes the current load state to the Postfix method, and is responsible for executing the custom state generation.
+    /// </summary>
+    /// <param name="__instance"> The instance of CityContructor in Il2cpp. </param>
+    /// <param name="__state"> The state to be passed to the Postfix method. </param>
     public static void Prefix(Il2CppObjectBase __instance, out int __state)
     {
         var loadCursor = Plugin.GetField<int>(__instance, "loadCursor");
         var loadState = (CityConstructor.LoadState)Plugin.GetField<int>(__instance, "loadState");
         var allLoadStates = Enum.GetValues(typeof(CityConstructor.LoadState)).Cast<CityConstructor.LoadState>()
-            .ToList<CityConstructor.LoadState>();
+            .ToList();
         var generateNew = Plugin.GetField<bool>(__instance, "generateNew");
         var loadingOperationActive = Plugin.GetField<bool>(__instance, "loadingOperationActive");
         var loadFullCityDataTask = Plugin.GetField<TaskBlittable>(__instance, "loadFullCityDataTask");
@@ -187,6 +235,12 @@ public class CityConstructor_Update_Patch
         Plugin.SetField(__instance, "loadCursor", loadCursor - 1);
     }
 
+    
+    /// <summary>
+    ///  Injects the custom state into the game. Makes sure to have a return path to the original state it was before any custom state.
+    /// </summary>
+    /// <param name="__instance"> The instance of CityContructor in Il2cpp. </param>
+    /// <param name="__state"> The state passed from the Prefix method. </param>
     public static void Postfix(Il2CppObjectBase __instance, int __state)
     {
         var loadCursor = Plugin.GetField<int>(__instance, "loadCursor");
@@ -208,7 +262,7 @@ public class CityConstructor_Update_Patch
             _ = Enum.Parse(typeof(CityConstructor.LoadState), toInject.After.Name);
             toInject.Original = toInject.After;
         }
-        catch (Exception e)
+        catch (Exception)
         {
             toInject.Original = Plugin.Instance.CustomSteps
                 .Find(x => x.Step.LoadState == (CityConstructor.LoadState)__state).Original;
