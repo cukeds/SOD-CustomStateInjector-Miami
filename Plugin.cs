@@ -172,7 +172,12 @@ public class Plugin : BasePlugin
                 $"Generate Methods not found for: {string.Join(", ", notfound.Select(x => x.Step.Name))}");
         }
 
-        Log.LogInfo($"{string.Join(", ", found.Select(x => x.Step.Name))} added to custom steps");
+        Log.LogInfo($"{string.Join(", ", found.Select(x => x.Step.Name))}");
+        Log.LogInfo("Custom Load Order:");
+        foreach (var step in found)
+        {
+            Log.LogInfo($"Step '{step.Step.Name}' after '{step.After.Name}'");
+        }
     }
 
     
@@ -212,6 +217,7 @@ public class CityConstructor_Update_Patch
     /// <param name="__state"> The state to be passed to the Postfix method. </param>
     public static void Prefix(Il2CppObjectBase __instance, out int __state)
     {
+       
         var loadCursor = Plugin.GetField<int>(__instance, "loadCursor");
         var loadState = (CityConstructor.LoadState)Plugin.GetField<int>(__instance, "loadState");
         var allLoadStates = Enum.GetValues(typeof(CityConstructor.LoadState)).Cast<CityConstructor.LoadState>()
