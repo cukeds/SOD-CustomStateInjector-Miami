@@ -2,12 +2,10 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using BepInEx;
 using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
 using HarmonyLib;
-using Il2CppInterop.Runtime.InteropTypes;
 using SODCustomStateInjectorMiami.Attributes;
 
 
@@ -40,6 +38,7 @@ public class Plugin : BasePlugin
     public static Plugin Instance { get; private set; }
     
     public List<CustomStep> CustomSteps;
+    public List<CustomStep> ToGenerate;
 
     private static Dictionary<string, Action> stateGenerateMethods = new();
     
@@ -47,6 +46,7 @@ public class Plugin : BasePlugin
     {        
         Instance = Instance == null ? this : throw new Exception("A Plugin instance already exists.");
         CustomSteps = [];
+        ToGenerate = [];
         Harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
         Log = base.Log;
         Harmony.PatchAll();
@@ -59,41 +59,7 @@ public class Plugin : BasePlugin
         RegisterStateGenerateMethods();
         ValidateStateGenerateMethods();
     }
-
     
-    /// <summary>
-    ///   Gets the value of a field from Il2CPP.
-    /// </summary>
-    /// <param name="instance"></param>
-    /// <param name="fieldName"></param>
-    /// <typeparam name="T"> The type to cast the field. Has to be blittable.</typeparam>
-    /// <returns> The value of the field.</returns>
-    public static T GetField<T>(Il2CppObjectBase instance, string fieldName)
-    {
-        var field = IL2CPPUtils.GetFieldIl2cpp(instance, fieldName);
-        return IL2CPPUtils.GetFieldValue<T>(instance, field);
-    }
-
-    /// <summary>
-    ///  Sets the value of a field from Il2CPP.
-    /// </summary>
-    /// <param name="instance"></param>
-    /// <param name="fieldName"></param>
-    /// <param name="value"> The value to set the field to.</param>
-    /// <typeparam name="T"> The type of the value to set. Has to be blittable.</typeparam>
-    public static void SetField<T>(Il2CppObjectBase instance, string fieldName, T value)
-    {
-        var field = IL2CPPUtils.GetFieldIl2cpp(instance, fieldName);
-        IL2CPPUtils.SetFieldIl2cpp(instance, field, value);
-    }
-
-    
-    /// <summary>
-    ///  Gets the Enum value of a step based on the name.
-    /// </summary>
-    /// <param name="name">The name of the step.</param>
-    /// <returns> The Enum value of the custom step.</returns>
-    /// <exception cref="Exception"> If the step is not found in the custom steps or in the CityConstructor.LoadState.</exception>
     public CityConstructor.LoadState GetLoadState(string name)
     {
         var res = CustomSteps.Find(x => x.Step.Name == name);
@@ -134,6 +100,7 @@ public class Plugin : BasePlugin
 
                 var afterStep = new Step { Name = attribute.AfterStepName, LoadState = Instance.GetLoadState(attribute.AfterStepName) };
                 Instance.CustomSteps.Add(new CustomStep { Step = customStep, After = afterStep });
+                Instance.ToGenerate.Add(new CustomStep { Step = customStep, After = afterStep });
             }
         }
     }
@@ -196,87 +163,88 @@ public class Plugin : BasePlugin
             Log.LogError($"No Generate method found for state: {stateName}");
         }
     }
+
+    internal List<Step> FindConsecutiveSteps(List<CustomStep> customSteps, Step startingStep)
+    {
+        // Create a dictionary to map each step to its subsequent step
+        Log.LogInfo("Finding consecutive steps...");
+        Dictionary<Step, Step> stepMap = new();
+        foreach (var customStep in customSteps)
+        {
+            Log.LogInfo($"{customStep.After.Name}, {customStep.Step.Name}");
+            stepMap[customStep.After] = customStep.Step;
+        }
+        Log.LogInfo("Step map created!");
+        // Collect all consecutive steps starting from the given starting step
+        List<Step> consecutiveSteps = [];
+        var currentStep = startingStep;
+        while (stepMap.ContainsKey(currentStep))
+        {
+            Log.LogInfo(currentStep.Name);
+            consecutiveSteps.Add(stepMap[currentStep]);
+            currentStep = stepMap[currentStep];
+            Log.LogInfo(currentStep.Name);
+        }
+        Log.LogInfo("Consecutive steps found!");
+        return consecutiveSteps;
+    }
 }
+    
+
 
 
 [HarmonyPatch(typeof(CityConstructor), "Update")]
 public class CityConstructor_Update_Patch
 {
 
-    [StructLayout(LayoutKind.Sequential)]
-    public struct TaskBlittable
-    {
-        public bool IsCompleted;
-    }
-
-
     /// <summary>
     ///  Passes the current load state to the Postfix method, and is responsible for executing the custom state generation.
     /// </summary>
-    /// <param name="__instance"> The instance of CityContructor in Il2cpp. </param>
+    /// <param name="__instance"> The instance of CityContructor. </param>
     /// <param name="__state"> The state to be passed to the Postfix method. </param>
-    public static void Prefix(Il2CppObjectBase __instance, out int __state)
+    public static void Prefix(CityConstructor __instance, out int __state)
     {
-       
-        var loadCursor = Plugin.GetField<int>(__instance, "loadCursor");
-        var loadState = (CityConstructor.LoadState)Plugin.GetField<int>(__instance, "loadState");
+        var loadCursor = __instance.loadCursor;
+        var loadState = __instance.loadState;
         var allLoadStates = Enum.GetValues(typeof(CityConstructor.LoadState)).Cast<CityConstructor.LoadState>()
             .ToList();
-        var generateNew = Plugin.GetField<bool>(__instance, "generateNew");
-        var loadingOperationActive = Plugin.GetField<bool>(__instance, "loadingOperationActive");
-        var loadFullCityDataTask = Plugin.GetField<TaskBlittable>(__instance, "loadFullCityDataTask");
-
+        var generateNew = __instance.generateNew;
+        var loadingOperationActive = __instance.loadingOperationActive;
+        var loadFullCityDataTask = __instance.loadFullCityDataTask;
         __state = (int)loadState;
         if (loadCursor >= allLoadStates.Count) return;
-        if (loadingOperationActive && !loadFullCityDataTask.IsCompleted) return;
+        if (!loadingOperationActive || loadFullCityDataTask is { IsCompleted: true }) return;
         if (!generateNew) return;
-        var toInject = Plugin.Instance.CustomSteps.Find(x => x.Step.LoadState == loadState);
+        var toInject = Plugin.Instance.ToGenerate.Find(x => x.Step.LoadState == loadState);
         if (toInject == null) return;
-        Plugin.Log.LogInfo($"Generating {toInject.Step.Name}...");
-
-        Plugin.Generate(toInject.Step.Name);
-
-        Plugin.Log.LogInfo($"Generation of {toInject.Step.Name} complete!");
-        Plugin.SetField(__instance, "loadState", (int)toInject.Original.LoadState);
-        Plugin.SetField(__instance, "loadCursor", loadCursor - 1);
+        
+        var steps = Plugin.Instance.FindConsecutiveSteps(Plugin.Instance.ToGenerate, toInject.After);
+        Plugin.Log.LogInfo("Generating custom states...");
+        foreach (var step in steps)
+        {
+            Plugin.Log.LogInfo($"Generating {step.Name}...");
+            Plugin.Generate(step.Name);
+            Plugin.Log.LogInfo($"Generation of {step.Name} complete!");
+            Plugin.Instance.ToGenerate.Remove(Plugin.Instance.ToGenerate.Find(x => x.Step.LoadState == step.LoadState));
+        }
+        
+        __instance.loadState = toInject.After.LoadState;
     }
 
     
     /// <summary>
     ///  Injects the custom state into the game. Makes sure to have a return path to the original state it was before any custom state.
     /// </summary>
-    /// <param name="__instance"> The instance of CityContructor in Il2cpp. </param>
+    /// <param name="__instance"> The instance of CityContructor. </param>
     /// <param name="__state"> The state passed from the Prefix method. </param>
-    public static void Postfix(Il2CppObjectBase __instance, int __state)
+    public static void Postfix(CityConstructor __instance, int __state)
     {
-        var loadCursor = Plugin.GetField<int>(__instance, "loadCursor");
-        var allLoadStates = Enum.GetValues(typeof(CityConstructor.LoadState)).Cast<CityConstructor.LoadState>()
-            .ToList();
-        var generateNew = Plugin.GetField<bool>(__instance, "generateNew");
-        var loadingOperationActive = Plugin.GetField<bool>(__instance, "loadingOperationActive");
-        var loadFullCityDataTask = Plugin.GetField<TaskBlittable>(__instance, "loadFullCityDataTask");
-
-        if (loadCursor >= allLoadStates.Count + Plugin.Instance.CustomSteps.Count) return;
-        if (loadingOperationActive && !loadFullCityDataTask.IsCompleted) return;
-        if (!generateNew) return;
         var toInject =
-            Plugin.Instance.CustomSteps.Find(x => x.After.LoadState == (CityConstructor.LoadState)__state);
+            Plugin.Instance.ToGenerate.Find(x => x.After.LoadState == (CityConstructor.LoadState)__state);
         if (toInject == null) return;
-
-        try
-        {
-            _ = Enum.Parse(typeof(CityConstructor.LoadState), toInject.After.Name);
-            toInject.Original = toInject.After;
-        }
-        catch (Exception)
-        {
-            toInject.Original = Plugin.Instance.CustomSteps
-                .Find(x => x.Step.LoadState == (CityConstructor.LoadState)__state).Original;
-        }
-
+        
         Plugin.Log.LogInfo($"Injecting {toInject.Step.Name} into {toInject.After.Name}...");
-        Plugin.SetField(__instance, "loadState", (int)toInject.Step.LoadState);
-
+        __instance.loadState = toInject.Step.LoadState;
     }
 
 }
